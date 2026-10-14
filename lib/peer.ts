@@ -61,15 +61,9 @@ export async function createPeer(id?: string): Promise<Peer> {
 
 // Limites de segurança — configuráveis por variável de ambiente, ligados por padrão
 export const LIMITS = {
-  maxViewers: Math.max(1, Number(process.env.NEXT_PUBLIC_MAX_VIEWERS || 3)),
+  // Convidados além do anfitrião. Cada tela compartilhada é enviada a cada
+  // participante (malha P2P), então salas grandes pesam no upload de quem compartilha.
+  maxGuests: Math.max(1, Number(process.env.NEXT_PUBLIC_MAX_GUESTS || process.env.NEXT_PUBLIC_MAX_VIEWERS || 3)),
   maxSessionMinutes: Math.max(1, Number(process.env.NEXT_PUBLIC_MAX_SESSION_MINUTES || 60)),
   requireApproval: process.env.NEXT_PUBLIC_REQUIRE_APPROVAL !== "false",
 };
-
-// Mensagens trocadas pelo canal de dados entre host e visualizador
-export type HostMessage =
-  | { type: "pending" }
-  | { type: "rejected" }
-  | { type: "full" };
-
-export type ViewerMetadata = { name: string };

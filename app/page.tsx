@@ -19,20 +19,21 @@ export default function Home() {
     <div className="shell">
       <Link href="/" className="brand">Open<span>Screen</span></Link>
       <main className="main">
-        <h1>Mostre sua tela para quem tiver o seu IP.</h1>
+        <h1>Uma sala, um IP, todas as telas.</h1>
         <p className="lead">
-          Direto no navegador, sem instalar nada. A imagem vai de um computador ao outro, sem passar por servidor.
+          Direto no navegador, sem instalar nada. Cada pessoa compartilha a tela se quiser, e cada um escolhe qual
+          tela assistir. A imagem vai de um computador ao outro, sem passar por servidor.
         </p>
 
         <div className="split">
           <section>
-            <h2>Compartilhar minha tela</h2>
-            <p>Gere um IP de acesso e passe para quem vai assistir. Você escolhe a tela, janela ou aba.</p>
-            <Link href="/share" className="btn">Gerar IP</Link>
+            <h2>Criar uma sala</h2>
+            <p>Gere um IP de acesso e passe para quem você quer na sala. Você aprova quem entra.</p>
+            <Link href="/share" className="btn">Criar sala</Link>
           </section>
 
           <section>
-            <h2>Assistir uma tela</h2>
+            <h2>Entrar numa sala</h2>
             <p>Digite o IP que a outra pessoa te passou.</p>
             <form onSubmit={join}>
               <label htmlFor="code" className="sr-only">IP de acesso</label>
@@ -46,7 +47,7 @@ export default function Home() {
                 onChange={(e) => setCode(cleanCode(e.target.value))}
               />
               <button className="btn ghost" type="submit" disabled={!valid}>
-                Conectar
+                Entrar
               </button>
             </form>
           </section>
