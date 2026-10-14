@@ -65,6 +65,12 @@ export function RoomScreen({ room, onRestart }: { room: Room; onRestart?: () => 
 
   const canShare = typeof window !== "undefined" && window.isSecureContext && !!navigator.mediaDevices?.getDisplayMedia;
 
+  // O endereço do anfitrião vira o link de entrada da sala, para que copiar a
+  // barra do navegador funcione igual ao botão "Copiar link"
+  useEffect(() => {
+    if (isHost && s.code) window.history.replaceState(null, "", `/view/${toSlug(s.code)}`);
+  }, [isHost, s.code]);
+
   useEffect(() => {
     if (s.status !== "live") return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
