@@ -154,6 +154,7 @@ export class Room {
 
     peer.on("connection", (conn) => this.onGuestConnection(conn));
     peer.on("call", (call) => this.onCall(call));
+    this.keepSignaling(peer);
 
     peer.on("error", (err) => {
       if (err.type === "unavailable-id" && attempt < 3 && !this.state.selfId) {
@@ -161,10 +162,39 @@ export class Room {
         this.openHost(attempt + 1);
         return;
       }
+      // Ao reconectar, o servidor pode ainda não ter liberado o nosso IP
+      if (err.type === "unavailable-id" && this.state.selfId) return this.scheduleReconnect(peer, 5000);
       // Ligar para alguém que acabou de sair não é um erro da sala
       if (err.type === "peer-unavailable") return;
       this.set({ error: `Falha na conexão (${err.type}).` });
     });
+  }
+
+  // A conexão com o servidor de sinalização é o que faz o IP "existir" para
+  // quem tenta entrar. Com a aba em segundo plano (ex.: a pessoa foi para o
+  // Discord), o Chrome atrasa os timers do PeerJS e o servidor derruba a
+  // conexão; o PeerJS não reconecta sozinho, e a sala some para novos convidados.
+  private keepSignaling(peer: Peer) {
+    peer.on("disconnected", () => this.scheduleReconnect(peer, 1000));
+    const onVisible = () => {
+      if (this.closed || this.peer !== peer) return document.removeEventListener("visibilitychange", onVisible);
+      if (document.visibilityState === "visible" && peer.disconnected) this.scheduleReconnect(peer, 0);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+  }
+
+  private reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+
+  private scheduleReconnect(peer: Peer, delay: number) {
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = setTimeout(() => {
+      if (this.closed || this.peer !== peer || peer.destroyed || !peer.disconnected) return;
+      try {
+        peer.reconnect();
+      } catch {
+        this.scheduleReconnect(peer, 5000);
+      }
+    }, delay);
   }
 
   private approvedCount() {
@@ -255,11 +285,18 @@ export class Room {
     if (this.closed) return peer.destroy();
     this.peer = peer;
 
+    // Se o IP não existisse, o servidor responderia logo com "peer-unavailable".
+    // Silêncio significa que a sala existe, mas a conexão direta não fechou
+    // (NAT/firewall bloqueando o WebRTC — normalmente resolvido com um TURN).
     this.notFoundTimer = setTimeout(() => {
-      if (this.state.status === "connecting") this.finish("notfound");
+      if (this.state.status === "connecting") this.finish("error");
     }, 15000);
 
+    // Sem o servidor, o convidado não recebe as telas de quem começar a compartilhar depois
+    this.keepSignaling(peer);
+
     peer.on("open", (id) => {
+      if (this.hostConn) return; // "open" de novo = só reconectou ao servidor
       this.set({ selfId: id });
       const conn = peer.connect(peerIdFor(this.state.code), { reliable: true, metadata: { name: this.name } });
       this.hostConn = conn;
@@ -275,6 +312,9 @@ export class Room {
         if (this.state.status === "connecting") this.finish("notfound");
         return;
       }
+      // Queda do servidor depois de falar com o anfitrião: a conexão direta
+      // continua de pé e o PeerJS reconecta ao servidor
+      if (this.hostConn?.open) return;
       if (this.state.status !== "live") this.finish("error");
     });
   }
@@ -419,6 +459,7 @@ export class Room {
     this.closed = true;
     clearInterval(this.timer);
     clearTimeout(this.notFoundTimer);
+    clearTimeout(this.reconnectTimer);
     this.state.local?.getTracks().forEach((t) => t.stop());
     this.outCalls.clear();
     this.inCalls.clear();

@@ -17,7 +17,7 @@ const messages: Record<Exclude<RoomStatus, "live">, { title: string; text: strin
   ended: { title: "Sala encerrada", text: "Quem criou a sala encerrou a sessão." },
   error: {
     title: "Não foi possível conectar",
-    text: "A rede pode estar bloqueando a conexão direta. Tente outra rede ou recarregue a página.",
+    text: "A sala existe, mas a rede bloqueou a conexão direta entre os computadores. Tente outra rede (ex.: Wi-Fi em vez de 4G) ou peça para quem criou a sala configurar um servidor TURN.",
   },
 };
 
