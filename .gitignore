@@ -1,0 +1,6 @@
+node_modules
+.next
+.env*.local
+
+# certificados do next dev --experimental-https
+certificates
