@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { LIMITS, toSlug } from "@/lib/peer";
-import type { AudioMode, Room, RoomStatus } from "@/lib/room";
+import { sharedAudio, type AudioMode, type Room, type RoomStatus } from "@/lib/room";
 
 const messages: Record<Exclude<RoomStatus, "live">, { title: string; text: string }> = {
   connecting: { title: "Conectando…", text: "Procurando a sala." },
@@ -86,6 +86,26 @@ export function RoomScreen({ room, onRestart }: { room: Room; onRestart?: () => 
   // A tela em destaque é a escolhida; se ela sumir, cai na primeira de outra pessoa
   const spotlight =
     screens.find((x) => x.id === selected) ?? screens.find((x) => !x.self) ?? screens[0] ?? null;
+
+  // Mostra o áudio que está indo de verdade, não só o que foi pedido ao navegador
+  const sending = s.local ? sharedAudio(s.local) : null;
+  const audioHint =
+    shareError ||
+    (sending === null
+      ? audioMode === "tab"
+        ? "Para enviar som, escolha uma aba e marque “Compartilhar áudio da aba”. O som de Discord, WhatsApp e outras chamadas não vai junto."
+        : audioMode === "system"
+          ? "O áudio do sistema inclui suas chamadas (Discord, WhatsApp): quem estiver nelas vai ouvir a própria voz de volta."
+          : ""
+      : sending !== audioMode && audioMode !== "none"
+        ? audioMode === "tab"
+          ? "Sua tela está indo sem som. O áudio só vai junto se você compartilhar uma aba: clique em “Trocar tela”, escolha uma aba e marque “Compartilhar áudio da aba”."
+          : "Para enviar o áudio do sistema, clique em “Trocar tela” e marque a opção de áudio do sistema."
+        : sending === "tab"
+          ? "Enviando o áudio da aba. Discord, WhatsApp e outras chamadas não vão junto."
+          : sending === "system"
+            ? "Enviando o áudio do sistema: quem estiver nas suas chamadas vai ouvir a própria voz de volta."
+            : "Sua tela está indo sem som.");
 
   async function share() {
     setShareError("");
@@ -257,7 +277,11 @@ export function RoomScreen({ room, onRestart }: { room: Room; onRestart?: () => 
                 id="audio"
                 className="select"
                 value={audioMode}
-                onChange={(e) => setAudioMode(e.target.value as AudioMode)}
+                onChange={(e) => {
+                  const mode = e.target.value as AudioMode;
+                  setAudioMode(mode);
+                  room.setAudio(mode); // tirar o áudio vale na hora; o resto pede "Trocar tela"
+                }}
               >
                 {audioOptions.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -287,13 +311,8 @@ export function RoomScreen({ room, onRestart }: { room: Room; onRestart?: () => 
             <Link href="/" className="btn ghost">Sair</Link>
           )}
         </div>
-        {canShare && (shareError || audioMode !== "none") && (
-          <p className={`bar-hint ${shareError ? "error" : ""}`}>
-            {shareError ||
-              (audioMode === "tab"
-                ? "Para enviar som, escolha uma aba e marque “Compartilhar áudio da aba”. O som de Discord, WhatsApp e outras chamadas não vai junto."
-                : "O áudio do sistema inclui suas chamadas (Discord, WhatsApp): quem estiver nelas vai ouvir a própria voz de volta.")}
-          </p>
+        {canShare && audioHint && (
+          <p className={`bar-hint ${shareError ? "error" : ""}`}>{audioHint}</p>
         )}
       </footer>
     </div>

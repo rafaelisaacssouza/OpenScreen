@@ -65,14 +65,33 @@ export async function captureScreen(audio: AudioMode): Promise<MediaStream> {
             restrictOwnAudio: true,
             suppressLocalAudioPlayback: false,
           },
-    // "exclude" tira do seletor do Chrome a opção de áudio do sistema inteiro.
+    // "exclude" pede ao navegador para não oferecer o áudio do sistema inteiro.
+    // É só uma dica: alguns navegadores oferecem mesmo assim (ver abaixo).
     systemAudio: audio === "system" ? "include" : "exclude",
     // Não oferece a própria aba do OpenScreen (efeito espelho infinito)
     selfBrowserSurface: "exclude",
     // Permite trocar de aba pela barra do navegador sem parar o compartilhamento
     surfaceSwitching: "include",
   };
-  return navigator.mediaDevices.getDisplayMedia(options as DisplayMediaStreamOptions);
+  const stream = await navigator.mediaDevices.getDisplayMedia(options as DisplayMediaStreamOptions);
+
+  // Garantia: áudio de algo que não é uma aba (tela inteira ou janela) é o
+  // áudio do sistema, que inclui Discord/WhatsApp. Fora do modo "system",
+  // ele é descartado aqui, antes de chegar a qualquer participante.
+  const surface = stream.getVideoTracks()[0]?.getSettings().displaySurface;
+  if (audio === "none" || (audio === "tab" && surface !== "browser")) {
+    stream.getAudioTracks().forEach((t) => {
+      t.stop();
+      stream.removeTrack(t);
+    });
+  }
+  return stream;
+}
+
+// O que a minha tela está enviando de áudio, para mostrar a quem compartilha
+export function sharedAudio(stream: MediaStream): AudioMode {
+  if (stream.getAudioTracks().length === 0) return "none";
+  return stream.getVideoTracks()[0]?.getSettings().displaySurface === "browser" ? "tab" : "system";
 }
 
 export class Room {
@@ -424,6 +443,30 @@ export class Room {
     });
     this.set({ local: stream });
     this.announceSharing();
+  }
+
+  // Muda o áudio do compartilhamento em andamento. Tirar o áudio vale na hora,
+  // sem abrir o seletor de novo. Retorna false quando o modo novo precisa de
+  // um áudio que não foi capturado — aí só escolhendo a tela de novo.
+  setAudio(mode: AudioMode): boolean {
+    const local = this.state.local;
+    if (!local) return true;
+    const current = sharedAudio(local);
+    if (current === mode) return true;
+    if (mode !== "none" && !(mode === "tab" && current === "system")) return false;
+    local.getAudioTracks().forEach((track) => {
+      // Corta o áudio nas ligações já abertas, sem derrubar o vídeo
+      this.outCalls.forEach((call) =>
+        call.peerConnection
+          ?.getSenders()
+          .filter((s) => s.track === track)
+          .forEach((s) => s.replaceTrack(null).catch(() => {}))
+      );
+      track.stop();
+      local.removeTrack(track);
+    });
+    this.set({}); // a interface relê o áudio que está indo
+    return true;
   }
 
   stopSharing() {
