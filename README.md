@@ -24,8 +24,8 @@ These limits are on unless the operator explicitly changes them:
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `NEXT_PUBLIC_REQUIRE_APPROVAL` | `true` | Host approves each participant before they enter the room |
-| `NEXT_PUBLIC_MAX_GUESTS` | `3` | Participants per room besides the host (`NEXT_PUBLIC_MAX_VIEWERS` is still read as a fallback) |
-| `NEXT_PUBLIC_MAX_SESSION_MINUTES` | `60` | Room closes automatically after this time |
+| `NEXT_PUBLIC_MAX_GUESTS` | `8` | Participants per room besides the host (`NEXT_PUBLIC_MAX_VIEWERS` is still read as a fallback) |
+| `NEXT_PUBLIC_MAX_SESSION_MINUTES` | `1440` (24 h) | Room closes automatically after this time |
 
 The goal is a tool for *showing your screen to someone*, not a livestreaming platform. Raising these limits changes the nature — and the risk profile — of your deployment.
 
@@ -52,7 +52,7 @@ Any participant who shares ──── media call ────► every other p
 3. **Sharing** — `navigator.mediaDevices.getDisplayMedia()` (requires HTTPS). The sharer calls every other participant directly (a full mesh). Swapping the screen re-calls everyone with the new one.
 4. **Signaling** — [PeerJS](https://peerjs.com) exchanges SDP/ICE. Serverless hosts such as Vercel can't keep WebSockets open, so a PeerServer handles this (the free public one by default). WebRTC media is always encrypted (DTLS-SRTP).
 
-Because it's a mesh, each sharer uploads one copy of their screen per participant. That's fine for small rooms (4 people by default); bigger rooms would need a media server (SFU).
+Because it's a mesh, each sharer uploads one copy of their screen per participant. With the default of 9 people, a sharer may need 15–25 Mbps of upload at 1080p; bigger rooms, or slower connections, would need a media server (SFU).
 
 ### Why P2P
 

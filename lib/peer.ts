@@ -63,7 +63,7 @@ export async function createPeer(id?: string): Promise<Peer> {
 export const LIMITS = {
   // Convidados além do anfitrião. Cada tela compartilhada é enviada a cada
   // participante (malha P2P), então salas grandes pesam no upload de quem compartilha.
-  maxGuests: Math.max(1, Number(process.env.NEXT_PUBLIC_MAX_GUESTS || process.env.NEXT_PUBLIC_MAX_VIEWERS || 3)),
-  maxSessionMinutes: Math.max(1, Number(process.env.NEXT_PUBLIC_MAX_SESSION_MINUTES || 60)),
+  maxGuests: Math.max(1, Number(process.env.NEXT_PUBLIC_MAX_GUESTS || process.env.NEXT_PUBLIC_MAX_VIEWERS || 8)),
+  maxSessionMinutes: Math.max(1, Number(process.env.NEXT_PUBLIC_MAX_SESSION_MINUTES || 1440)),
   requireApproval: process.env.NEXT_PUBLIC_REQUIRE_APPROVAL !== "false",
 };
