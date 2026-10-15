@@ -61,7 +61,10 @@ export function RoomScreen({ room, onRestart }: { room: Room; onRestart?: () => 
   const [shareError, setShareError] = useState("");
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const stageRef = useRef<HTMLElement>(null);
+  const [hover, setHover] = useState(false); // mouse em cima do painel
+  const [pinned, setPinned] = useState(false); // aberto por clique/toque na alça
+  const panelOpen = hover || pinned;
+  const roomRef = useRef<HTMLDivElement>(null);
 
   const canShare = typeof window !== "undefined" && window.isSecureContext && !!navigator.mediaDevices?.getDisplayMedia;
 
@@ -127,7 +130,7 @@ export function RoomScreen({ room, onRestart }: { room: Room; onRestart?: () => 
 
   function fullscreen() {
     if (document.fullscreenElement) document.exitFullscreen();
-    else stageRef.current?.requestFullscreen();
+    else roomRef.current?.requestFullscreen(); // a sala toda, para o painel continuar acessível
   }
 
   if (s.status !== "live") {
@@ -159,162 +162,174 @@ export function RoomScreen({ room, onRestart }: { room: Room; onRestart?: () => 
     );
   }
 
+  const shareControls = canShare ? (
+    <>
+      <button className="btn" onClick={share} disabled={busy}>
+        {busy ? "Aguardando…" : s.local ? "Trocar tela" : "Compartilhar tela"}
+      </button>
+      {s.local && <button className="btn danger" onClick={() => room.stopSharing()}>Parar</button>}
+    </>
+  ) : null;
+
   return (
-    <div className="room">
-      <header className="room-top">
-        <Link href="/" className="brand">Open<span>Screen</span></Link>
-        <div className="room-code">
-          <span className="status">
-            <span className="dot live" />
-            <span aria-label={`IP da sala ${s.code}`}>{s.code}</span>
-          </span>
-          <button className="btn ghost small" onClick={copy}>{copied ? "Link copiado" : "Copiar link"}</button>
-        </div>
-        <span className="meta">
-          {s.members.length}/{LIMITS.maxGuests + 1} na sala · encerra em {formatRemaining(s.deadline - now)}
-        </span>
-      </header>
+    <div className="room" ref={roomRef}>
+      <section className="stage" onClick={() => setPinned(false)}>
+        {spotlight ? (
+          <>
+            <Video key={spotlight.id} stream={spotlight.stream} muted={spotlight.self || !soundOn} className="stage-video" />
+            <span className="tag">{spotlight.name}</span>
+          </>
+        ) : (
+          <div className="stage-empty">
+            <h2>Ninguém está compartilhando</h2>
+            <p>
+              {isHost && s.members.length === 1
+                ? `Passe o IP ${s.code} para as pessoas entrarem. Qualquer um na sala pode mostrar a tela.`
+                : "Quando alguém compartilhar a tela, ela aparece aqui."}
+            </p>
+            {shareControls && <div className="row center">{shareControls}</div>}
+          </div>
+        )}
+      </section>
 
-      <div className="room-body">
-        <section className="stage" ref={stageRef}>
-          {spotlight ? (
-            <>
-              <Video
-                key={spotlight.id}
-                stream={spotlight.stream}
-                muted={spotlight.self || !soundOn}
-                className="stage-video"
-              />
-              <span className="tag">{spotlight.name}</span>
-            </>
-          ) : (
-            <div className="stage-empty">
-              <h2>Ninguém está compartilhando</h2>
-              <p>
-                {isHost && s.members.length === 1
-                  ? "Passe o IP para as pessoas entrarem. Qualquer um na sala pode mostrar a tela."
-                  : "Quando alguém compartilhar a tela, ela aparece aqui."}
-              </p>
+      {/* Painel lateral: fica recolhido numa alça fina e abre por cima da tela */}
+      <aside
+        className={`dock ${panelOpen ? "open" : ""}`}
+        onPointerEnter={(e) => e.pointerType === "mouse" && setHover(true)}
+        onPointerLeave={(e) => e.pointerType === "mouse" && setHover(false)}
+      >
+        <button
+          className="dock-handle"
+          onClick={() => setPinned(!pinned)}
+          aria-expanded={panelOpen}
+          aria-controls="room-panel"
+          aria-label={pinned ? "Fechar painel" : "Abrir painel da sala"}
+        >
+          <span className="grip" />
+          {isHost && s.requests.length > 0 && <span className="badge">{s.requests.length}</span>}
+        </button>
+
+        <div className="dock-panel" id="room-panel" inert={!panelOpen}>
+          <div className="dock-top">
+            <div className="dock-head">
+              <Link href="/" className="brand">Open<span>Screen</span></Link>
+              <span className="meta">encerra em {formatRemaining(s.deadline - now)}</span>
             </div>
-          )}
-        </section>
+            <div className="room-code">
+              <span className="status">
+                <span className="dot live" />
+                <span aria-label={`IP da sala ${s.code}`}>{s.code}</span>
+              </span>
+              <button className="btn ghost small" onClick={copy}>{copied ? "Link copiado" : "Copiar link"}</button>
+            </div>
 
-        <aside className="side">
-          {screens.length > 1 && (
-            <div className="requests">
-              <h3>Telas</h3>
-              <div className="tiles">
-                {screens.map((x) => (
-                  <button
-                    key={x.id}
-                    className={`tile ${x.id === spotlight?.id ? "active" : ""}`}
-                    onClick={() => setSelected(x.id)}
-                    aria-pressed={x.id === spotlight?.id}
-                  >
-                    <Video stream={x.stream} muted />
-                    <span>{x.name}</span>
-                  </button>
+            {isHost && s.requests.length > 0 && (
+              <div className="requests" aria-live="polite">
+                <h3>Pedindo para entrar</h3>
+                {s.requests.map((r) => (
+                  <div className="request incoming" key={r.id}>
+                    <strong>{r.name}</strong>
+                    <div className="actions">
+                      <button className="btn ghost" onClick={() => room.reject(r.id)}>Recusar</button>
+                      <button
+                        className="btn"
+                        onClick={() => room.accept(r.id)}
+                        disabled={s.members.length > LIMITS.maxGuests}
+                      >
+                        Aceitar
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {isHost && s.requests.length > 0 && (
-            <div className="requests" aria-live="polite">
-              <h3>Pedindo para entrar</h3>
-              {s.requests.map((r) => (
-                <div className="request incoming" key={r.id}>
-                  <strong>{r.name}</strong>
-                  <div className="actions">
-                    <button className="btn ghost" onClick={() => room.reject(r.id)}>Recusar</button>
+            {screens.length > 1 && (
+              <div className="requests">
+                <h3>Telas</h3>
+                <div className="tiles">
+                  {screens.map((x) => (
                     <button
-                      className="btn"
-                      onClick={() => room.accept(r.id)}
-                      disabled={s.members.length > LIMITS.maxGuests}
+                      key={x.id}
+                      className={`tile ${x.id === spotlight?.id ? "active" : ""}`}
+                      onClick={() => setSelected(x.id)}
+                      aria-pressed={x.id === spotlight?.id}
                     >
-                      Aceitar
+                      <Video stream={x.stream} muted />
+                      <span>{x.name}</span>
                     </button>
-                  </div>
+                  ))}
                 </div>
-              ))}
+              </div>
+            )}
+
+            <div className="requests">
+              <h3>Na sala · {s.members.length}/{LIMITS.maxGuests + 1}</h3>
+              {s.members.map((m) => {
+                const self = m.id === s.selfId;
+                const sharing = self ? !!s.local : m.sharing;
+                return (
+                  <div className="request" key={m.id}>
+                    <div className="who">
+                      <strong>{m.name}{self && " (você)"}</strong>
+                      <span className="meta">
+                        {[m.host && "criou a sala", sharing && "compartilhando"].filter(Boolean).join(" · ")}
+                      </span>
+                    </div>
+                    <div className="actions">
+                      {sharing && !self && s.streams[m.id] && spotlight?.id !== m.id && (
+                        <button className="btn ghost" onClick={() => setSelected(m.id)}>Assistir</button>
+                      )}
+                      {isHost && !m.host && (
+                        <button className="btn ghost" onClick={() => room.reject(m.id)}>Remover</button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
-
-          <div className="requests">
-            <h3>Na sala</h3>
-            {s.members.map((m) => {
-              const self = m.id === s.selfId;
-              const sharing = self ? !!s.local : m.sharing;
-              return (
-                <div className="request" key={m.id}>
-                  <div className="who">
-                    <strong>{m.name}{self && " (você)"}</strong>
-                    <span className="meta">
-                      {[m.host && "criou a sala", sharing && "compartilhando"].filter(Boolean).join(" · ")}
-                    </span>
-                  </div>
-                  <div className="actions">
-                    {sharing && !self && s.streams[m.id] && spotlight?.id !== m.id && (
-                      <button className="btn ghost" onClick={() => setSelected(m.id)}>Assistir</button>
-                    )}
-                    {isHost && !m.host && (
-                      <button className="btn ghost" onClick={() => room.reject(m.id)}>Remover</button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
           </div>
-        </aside>
-      </div>
 
-      <footer className="room-bar">
-        <div className="bar-group">
-          {canShare ? (
-            <>
-              <label className="sr-only" htmlFor="audio">Áudio da tela</label>
-              <select
-                id="audio"
-                className="select"
-                value={audioMode}
-                onChange={(e) => {
-                  const mode = e.target.value as AudioMode;
-                  setAudioMode(mode);
-                  room.setAudio(mode); // tirar o áudio vale na hora; o resto pede "Trocar tela"
-                }}
-              >
-                {audioOptions.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-              <button className="btn" onClick={share} disabled={busy}>
-                {busy ? "Aguardando…" : s.local ? "Trocar tela" : "Compartilhar tela"}
-              </button>
-              {s.local && (
-                <button className="btn danger" onClick={() => room.stopSharing()}>Parar</button>
+          <div className="dock-bottom">
+            {canShare ? (
+              <>
+                <label className="field-label" htmlFor="audio">Áudio da tela</label>
+                <select
+                  id="audio"
+                  className="select"
+                  value={audioMode}
+                  onChange={(e) => {
+                    const mode = e.target.value as AudioMode;
+                    setAudioMode(mode);
+                    room.setAudio(mode); // tirar o áudio vale na hora; o resto pede "Trocar tela"
+                  }}
+                >
+                  {audioOptions.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                {audioHint && <p className={`bar-hint ${shareError ? "error" : ""}`}>{audioHint}</p>}
+                <div className="bar-group">{shareControls}</div>
+              </>
+            ) : (
+              <span className="meta">Este navegador só pode assistir.</span>
+            )}
+            <div className="bar-group">
+              {spotlight && !spotlight.self && (
+                <button className="btn ghost" onClick={() => setSoundOn(!soundOn)}>
+                  {soundOn ? "Silenciar" : "Ativar som"}
+                </button>
               )}
-            </>
-          ) : (
-            <span className="meta">Este navegador só pode assistir.</span>
-          )}
+              <button className="btn ghost" onClick={fullscreen}>Tela cheia</button>
+              {isHost ? (
+                <button className="btn danger" onClick={() => room.close()}>Encerrar sala</button>
+              ) : (
+                <Link href="/" className="btn ghost">Sair</Link>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="bar-group">
-          {spotlight && !spotlight.self && (
-            <button className="btn ghost" onClick={() => setSoundOn(!soundOn)}>
-              {soundOn ? "Silenciar" : "Ativar som"}
-            </button>
-          )}
-          {spotlight && <button className="btn ghost" onClick={fullscreen}>Tela cheia</button>}
-          {isHost ? (
-            <button className="btn danger" onClick={() => room.close()}>Encerrar sala</button>
-          ) : (
-            <Link href="/" className="btn ghost">Sair</Link>
-          )}
-        </div>
-        {canShare && audioHint && (
-          <p className={`bar-hint ${shareError ? "error" : ""}`}>{audioHint}</p>
-        )}
-      </footer>
+      </aside>
     </div>
   );
 }
